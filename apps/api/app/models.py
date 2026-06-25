@@ -28,6 +28,10 @@ class Annotation(BaseModel):
     points: list[tuple[float, float]]
     confidence: float | None = None
     source: Literal["manual", "ai", "corrected"]
+    annotationType: str = "区域标注"
+    description: str = ""
+    aiDiagnosis: str | None = None
+    aiModel: str | None = None
     visible: bool = True
 
 
@@ -134,3 +138,8 @@ class ProjectSettings(BaseModel):
     requireExportApproval: bool
     keepAuditDays: int = Field(ge=30, le=3650)
     labels: list[dict[str, str]]
+
+
+class AssistantRequest(BaseModel):
+    message: str
+    context: str | None = None

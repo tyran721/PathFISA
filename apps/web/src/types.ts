@@ -9,6 +9,10 @@ export interface Annotation {
   points: Array<[number, number]>;
   confidence?: number;
   source: "manual" | "ai" | "corrected";
+  annotationType: string;
+  description: string;
+  aiDiagnosis?: string;
+  aiModel?: string;
   visible: boolean;
 }
 
@@ -114,4 +118,21 @@ export interface AnalyticsData {
     hours: number;
     passRate: number;
   }>;
+}
+
+export interface AppNotification {
+  id: string;
+  type: "task" | "review" | "model" | "system";
+  title: string;
+  message: string;
+  time: string;
+  unread: boolean;
+  link?: string;
+}
+
+export interface AssistantMessage {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+  createdAt: string;
 }

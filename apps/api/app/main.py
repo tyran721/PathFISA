@@ -14,6 +14,7 @@ from .models import (
     AnnotationTask,
     AnnotationTaskCreate,
     AnnotationTaskUpdate,
+    AssistantRequest,
     ModelRun,
     ModelRunCreate,
     ProjectSettings,
@@ -418,6 +419,10 @@ def ai_suggestions(slide_id: str) -> list[Annotation]:
             color="#ff6174",
             confidence=0.93,
             source="ai",
+            annotationType="AI 疑似病变区域",
+            description="由模型自动生成，需由病理医生确认边界与类别。",
+            aiDiagnosis="模型提示该区域具有异常腺体/组织结构特征，建议优先复核。",
+            aiModel="PathFISA-Seg v2.4.1",
             points=[
                 (width * 0.19, height * 0.24),
                 (width * 0.36, height * 0.18),
@@ -435,6 +440,10 @@ def ai_suggestions(slide_id: str) -> list[Annotation]:
             color="#38d9a9",
             confidence=0.86,
             source="ai",
+            annotationType="AI 组织区域",
+            description="模型识别的间质样区域，不能直接作为临床诊断。",
+            aiDiagnosis="模型提示该区域以间质样组织为主，建议结合高倍视野复核。",
+            aiModel="PathFISA-Seg v2.4.1",
             points=[
                 (width * 0.53, height * 0.34),
                 (width * 0.73, height * 0.28),
@@ -444,6 +453,81 @@ def ai_suggestions(slide_id: str) -> list[Annotation]:
             ],
         ),
     ]
+
+
+@app.get("/api/v1/notifications")
+def notifications() -> list[dict]:
+    return [
+        {
+            "id": "notice-001",
+            "type": "review",
+            "title": "有 1 个任务等待复核",
+            "message": "B20028048-1.svs 的病理区域专家复核任务已提交。",
+            "time": "5 分钟前",
+            "unread": True,
+            "link": "/tasks",
+        },
+        {
+            "id": "notice-002",
+            "type": "task",
+            "title": "真实切片已接入",
+            "message": "4 张 SVS 全切片已完成校验并可开始标注。",
+            "time": "20 分钟前",
+            "unread": True,
+            "link": "/slides",
+        },
+        {
+            "id": "notice-003",
+            "type": "model",
+            "title": "模型评估作业完成",
+            "message": "最近一次模拟评估已生成指标和运行记录。",
+            "time": "今天 09:40",
+            "unread": False,
+            "link": "/models",
+        },
+        {
+            "id": "notice-004",
+            "type": "system",
+            "title": "标注数据自动保存正常",
+            "message": "所有切片标注均保存到独立 JSON，不会修改原始 SVS。",
+            "time": "昨天",
+            "unread": False,
+        },
+    ]
+
+
+@app.post("/api/v1/assistant/chat")
+def assistant_chat(payload: AssistantRequest) -> dict:
+    message = payload.message.strip()
+    lower = message.lower()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if "标注" in message or "annotation" in lower:
+        answer = (
+            "建议先在低倍率确认组织范围，再切换到高倍率细化边界。"
+            "人工标注使用实线，AI 诊断建议使用虚线；选中对象后可填写类型、颜色和描述。"
+        )
+    elif "ai" in lower or "诊断" in message or "模型" in message:
+        answer = (
+            "当前 AI 结果是模拟辅助提示，不构成临床诊断。"
+            "可以在切片工作台点击“分析当前切片”，查看置信度、模型版本和诊断提示，再由人工确认。"
+        )
+    elif "切片" in message or "svs" in lower:
+        answer = (
+            "系统当前已接入 23766he、23871he、B20028048-1 和 CMU-1-JP2K-33005 四张 SVS，"
+            "采用只读瓦片方式加载，原文件不会被修改。"
+        )
+    elif "任务" in message:
+        answer = "可在标注任务页面创建、编辑、删除任务，并将状态从待开始推进到标注中、待复核和已完成。"
+    else:
+        answer = (
+            "我可以帮助你查看切片、解释标注工具、规划任务或说明模型流程。"
+            f"你刚才的问题是“{message}”，建议补充具体切片或操作场景，我会给出更准确的步骤。"
+        )
+    return {
+        "answer": answer,
+        "suggestions": ["如何区分人工与 AI 标注？", "打开真实 SVS 切片", "创建一个标注任务"],
+    }
 
 
 def task_records() -> list[dict]:

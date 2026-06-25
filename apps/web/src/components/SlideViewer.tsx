@@ -64,12 +64,14 @@ function AnnotationShape({
   onSelect: () => void;
 }) {
   if (!annotation.visible) return null;
+  const isAi = annotation.source === "ai";
   const common = {
     stroke: annotation.color,
-    strokeWidth: selected ? 22 : 14,
+    strokeWidth: selected ? 3 : 2,
     vectorEffect: "non-scaling-stroke" as const,
-    fill: `${annotation.color}${selected ? "43" : "2d"}`,
-    className: `annotation-shape ${selected ? "selected" : ""}`,
+    fill: `${annotation.color}${selected ? "32" : isAi ? "14" : "20"}`,
+    strokeDasharray: isAi ? "8 5" : undefined,
+    className: `annotation-shape ${isAi ? "ai" : "manual"} ${selected ? "selected" : ""}`,
     onPointerDown: (event: React.PointerEvent) => {
       event.stopPropagation();
       onSelect();
@@ -141,6 +143,10 @@ export function SlideViewer({
       item.source === "ai" ? showAi : showManual
     ),
     [annotations, showAi, showManual]
+  );
+  const selectedAnnotation = useMemo(
+    () => annotations.find((item) => item.id === selectedId) ?? null,
+    [annotations, selectedId]
   );
 
   const updateViewBox = useCallback(() => {
@@ -243,6 +249,8 @@ export function SlideViewer({
       color: activeLabel.color,
       points,
       source: "manual",
+      annotationType: "区域标注",
+      description: "",
       visible: true
     }),
     [activeLabel]
@@ -337,6 +345,33 @@ export function SlideViewer({
         item.id === id ? { ...item, visible: !item.visible } : item
       )
     );
+  };
+
+  const updateAnnotation = (id: string, updates: Partial<Annotation>) => {
+    setAnnotations((items) =>
+      items.map((item) => item.id === id ? { ...item, ...updates } : item)
+    );
+  };
+
+  const updateSelectedLabel = (labelId: string) => {
+    if (!selectedAnnotation) return;
+    const label = LABELS.find((item) => item.id === labelId);
+    if (!label) return;
+    updateAnnotation(selectedAnnotation.id, {
+      labelId: label.id,
+      label: label.name,
+      color: label.color,
+      source: selectedAnnotation.source === "ai" ? "corrected" : selectedAnnotation.source
+    });
+  };
+
+  const acceptAiAnnotation = () => {
+    if (!selectedAnnotation || selectedAnnotation.source !== "ai") return;
+    snapshot();
+    updateAnnotation(selectedAnnotation.id, {
+      source: "corrected",
+      description: selectedAnnotation.description || "AI 建议已由人工确认。"
+    });
   };
 
   const save = async () => {
@@ -567,7 +602,7 @@ export function SlideViewer({
                 )}
                 fill={`${activeLabel.color}20`}
                 stroke={activeLabel.color}
-                strokeWidth={12}
+                strokeWidth={2}
                 vectorEffect="non-scaling-stroke"
                 strokeDasharray="30 18"
               />
@@ -576,10 +611,10 @@ export function SlideViewer({
                   key={index}
                   cx={x}
                   cy={y}
-                  r={22}
+                  r={12}
                   fill="#fff"
                   stroke={activeLabel.color}
-                  strokeWidth={10}
+                  strokeWidth={2}
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
@@ -593,7 +628,7 @@ export function SlideViewer({
               height={Math.abs(cursorPoint[1] - rectangleStart[1])}
               fill={`${activeLabel.color}25`}
               stroke={activeLabel.color}
-              strokeWidth={12}
+              strokeWidth={2}
               vectorEffect="non-scaling-stroke"
               strokeDasharray="28 16"
             />
@@ -730,7 +765,7 @@ export function SlideViewer({
                         #{String(index + 1).padStart(2, "0")} ·{" "}
                         {annotation.source === "ai"
                           ? `AI ${(annotation.confidence ?? 0) * 100}%`
-                          : "人工"}
+                          : annotation.source === "corrected" ? "AI 修订" : "人工"}
                       </small>
                     </span>
                     <i
@@ -753,6 +788,71 @@ export function SlideViewer({
                 )}
               </div>
             </div>
+
+            {selectedAnnotation && (
+              <div className="panel-section annotation-properties">
+                <div className="section-title">
+                  <span>标注属性</span>
+                  <em className={`source-badge ${selectedAnnotation.source}`}>
+                    {selectedAnnotation.source === "ai" ? "AI 诊断" : selectedAnnotation.source === "corrected" ? "AI 修订" : "人工标注"}
+                  </em>
+                </div>
+                <label>
+                  <span>标注类别</span>
+                  <select
+                    value={selectedAnnotation.labelId}
+                    onChange={(event) => updateSelectedLabel(event.target.value)}
+                  >
+                    {LABELS.map((label) => <option value={label.id} key={label.id}>{label.name}</option>)}
+                  </select>
+                </label>
+                <div className="property-row">
+                  <label>
+                    <span>标注类型</span>
+                    <select
+                      value={selectedAnnotation.annotationType}
+                      onChange={(event) => updateAnnotation(selectedAnnotation.id, { annotationType: event.target.value })}
+                    >
+                      <option>区域标注</option>
+                      <option>疑似病变</option>
+                      <option>正常组织</option>
+                      <option>排除区域</option>
+                      <option>质控问题</option>
+                      <option>AI 疑似病变区域</option>
+                      <option>AI 组织区域</option>
+                    </select>
+                  </label>
+                  <label className="color-field">
+                    <span>线条颜色</span>
+                    <input
+                      type="color"
+                      value={selectedAnnotation.color}
+                      onChange={(event) => updateAnnotation(selectedAnnotation.id, {
+                        color: event.target.value,
+                        source: selectedAnnotation.source === "ai" ? "corrected" : selectedAnnotation.source
+                      })}
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span>类型描述</span>
+                  <textarea
+                    rows={2}
+                    value={selectedAnnotation.description}
+                    placeholder="填写形态、边界、异常特征或复核说明"
+                    onChange={(event) => updateAnnotation(selectedAnnotation.id, { description: event.target.value })}
+                  />
+                </label>
+                {selectedAnnotation.aiDiagnosis && (
+                  <div className="ai-diagnosis-card">
+                    <div><Bot size={16} /><strong>AI 诊断提示</strong><span>{Math.round((selectedAnnotation.confidence ?? 0) * 100)}%</span></div>
+                    <p>{selectedAnnotation.aiDiagnosis}</p>
+                    <small>{selectedAnnotation.aiModel} · 仅供辅助标注，不构成临床诊断</small>
+                    {selectedAnnotation.source === "ai" && <button onClick={acceptAiAnnotation}><Check size={14} />人工确认此建议</button>}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="ai-action-card">
               <div><Sparkles size={18} /><span><strong>AI 智能预标注</strong><small>PathFISA-Seg v2.4.1</small></span></div>

@@ -1,6 +1,7 @@
 import type {
   AnalyticsData,
   Annotation,
+  AppNotification,
   AnnotationTask,
   AnnotationTaskInput,
   ModelRun,
@@ -147,4 +148,19 @@ export function saveProjectSettings(
 
 export function getAnalytics(): Promise<AnalyticsData> {
   return requestJson("/api/v1/analytics");
+}
+
+export function getNotifications(): Promise<AppNotification[]> {
+  return requestJson("/api/v1/notifications");
+}
+
+export function askAssistant(
+  message: string,
+  context?: string
+): Promise<{ answer: string; suggestions: string[] }> {
+  return requestJson("/api/v1/assistant/chat", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ message, context })
+  });
 }
