@@ -35,7 +35,7 @@ import {
 import { runAiSuggestion, saveAnnotations } from "../api";
 import type { Annotation, LabelOption, SlideImage } from "../types";
 
-type Tool = "pan" | "select" | "polygon" | "rectangle" | "point";
+type Tool = "pan" | "select" | "polygon" | "rectangle" | "point" | "measure";
 
 const LABELS: LabelOption[] = [
   { id: "tumor", name: "肿瘤区域", color: "#ff6174", hotkey: "1" },
@@ -47,6 +47,7 @@ const LABELS: LabelOption[] = [
 interface SlideViewerProps {
   slide: SlideImage;
   initialAnnotations: Annotation[];
+  panelCollapsed?: boolean;
 }
 
 function pointsToString(points: Array<[number, number]>) {
@@ -107,7 +108,8 @@ function AnnotationShape({
 
 export function SlideViewer({
   slide,
-  initialAnnotations
+  initialAnnotations,
+  panelCollapsed = false
 }: SlideViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -129,10 +131,16 @@ export function SlideViewer({
   const [aiLoading, setAiLoading] = useState(false);
   const [rightTab, setRightTab] = useState<"objects" | "info">("objects");
   const [showAi, setShowAi] = useState(true);
+  const [showManual, setShowManual] = useState(true);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const [display, setDisplay] = useState({ brightness: 100, contrast: 100, saturation: 100 });
+  const [measurement, setMeasurement] = useState<Array<[number, number]>>([]);
 
   const visibleAnnotations = useMemo(
-    () => annotations.filter((item) => showAi || item.source !== "ai"),
-    [annotations, showAi]
+    () => annotations.filter((item) =>
+      item.source === "ai" ? showAi : showManual
+    ),
+    [annotations, showAi, showManual]
   );
 
   const updateViewBox = useCallback(() => {
@@ -258,6 +266,10 @@ export function SlideViewer({
       setDraft((items) => [...items, point]);
       return;
     }
+    if (tool === "measure") {
+      setMeasurement((items) => items.length >= 2 || items.length === 0 ? [point] : [...items, point]);
+      return;
+    }
     if (tool === "rectangle") {
       setRectangleStart(point);
       setCursorPoint(point);
@@ -364,8 +376,74 @@ export function SlideViewer({
     viewer.viewport.applyConstraints();
   };
 
+  const focusSelected = () => {
+    const annotation = annotations.find((item) => item.id === selectedId);
+    const viewer = viewerRef.current;
+    const item = viewer?.world.getItemAt(0);
+    if (!viewer || !item || !annotation) {
+      viewer?.viewport.goHome();
+      return;
+    }
+    const xs = annotation.points.map(([x]) => x);
+    const ys = annotation.points.map(([, y]) => y);
+    const padding = Math.max(
+      160,
+      Math.max(...xs) - Math.min(...xs),
+      Math.max(...ys) - Math.min(...ys)
+    ) * 0.22;
+    const rect = new OpenSeadragon.Rect(
+      Math.min(...xs) - padding,
+      Math.min(...ys) - padding,
+      Math.max(...xs) - Math.min(...xs) + padding * 2,
+      Math.max(...ys) - Math.min(...ys) + padding * 2
+    );
+    viewer.viewport.fitBounds(item.imageToViewportRectangle(rect), false);
+  };
+
+  const measurementMicrons = measurement.length === 2
+    ? Math.hypot(
+        measurement[1][0] - measurement[0][0],
+        measurement[1][1] - measurement[0][1]
+      ) * slide.mpp
+    : 0;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void save();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        event.shiftKey ? redo() : undo();
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "v") setTool("select");
+      if (key === "h") setTool("pan");
+      if (key === "p") setTool("polygon");
+      if (key === "r") setTool("rectangle");
+      if (key === "d") setTool("point");
+      if (key === "m") setTool("measure");
+      if (key === "delete" || key === "backspace") removeSelected();
+      if (key === "escape") {
+        setDraft([]);
+        setRectangleStart(null);
+        setMeasurement([]);
+        setCursorPoint(null);
+      }
+      const label = LABELS.find((item) => item.hotkey === event.key);
+      if (label) setActiveLabel(label);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   return (
-    <div className="viewer-workspace">
+    <div className={`viewer-workspace ${panelCollapsed ? "panel-collapsed" : ""}`}>
       <aside className="tool-rail">
         <div className="tool-group">
           <button
@@ -405,12 +483,12 @@ export function SlideViewer({
           >
             <CircleDot size={20} />
           </button>
-          <button title="智能框选"><BoxSelect size={20} /></button>
+          <button title="智能框选" onClick={runAi} disabled={aiLoading}><BoxSelect size={20} /></button>
         </div>
         <div className="tool-group">
-          <button title="测量"><Ruler size={20} /></button>
-          <button title="视野聚焦"><Focus size={20} /></button>
-          <button title="显示设置"><Contrast size={20} /></button>
+          <button className={tool === "measure" ? "active" : ""} title="测量 M" onClick={() => { setTool("measure"); setMeasurement([]); }}><Ruler size={20} /></button>
+          <button title="聚焦选中对象" onClick={focusSelected}><Focus size={20} /></button>
+          <button className={displayOpen ? "active" : ""} title="显示设置" onClick={() => setDisplayOpen(!displayOpen)}><Contrast size={20} /></button>
         </div>
         <div className="tool-group">
           <button onClick={undo} disabled={!history.length} title="撤销">
@@ -459,7 +537,11 @@ export function SlideViewer({
           <i />
         </div>
 
-        <div ref={hostRef} className="osd-viewer" />
+        <div
+          ref={hostRef}
+          className="osd-viewer"
+          style={{ filter: `brightness(${display.brightness}%) contrast(${display.contrast}%) saturate(${display.saturation}%)` }}
+        />
         <svg
           ref={svgRef}
           className="annotation-overlay"
@@ -516,6 +598,21 @@ export function SlideViewer({
               strokeDasharray="28 16"
             />
           )}
+          {measurement.length > 0 && (
+            <g className="measurement-shape">
+              <line
+                x1={measurement[0][0]}
+                y1={measurement[0][1]}
+                x2={(measurement[1] ?? cursorPoint ?? measurement[0])[0]}
+                y2={(measurement[1] ?? cursorPoint ?? measurement[0])[1]}
+                stroke="#f8f9a2"
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+                strokeDasharray="8 5"
+              />
+              {measurement.map(([x, y], index) => <circle key={index} cx={x} cy={y} r={16} fill="#f8f9a2" vectorEffect="non-scaling-stroke" />)}
+            </g>
+          )}
         </svg>
 
         {tool === "polygon" && draft.length > 0 && (
@@ -523,6 +620,26 @@ export function SlideViewer({
             <span>{draft.length} 个节点</span>
             双击闭合，Esc 取消
             <button onClick={finishPolygon}><Check size={14} />完成</button>
+          </div>
+        )}
+        {tool === "measure" && (
+          <div className="drawing-hint measurement-hint">
+            <Ruler size={14} />
+            {measurement.length < 2 ? "依次点击两个位置进行测量" : `距离 ${measurementMicrons.toFixed(1)} μm`}
+            {measurement.length > 0 && <button onClick={() => setMeasurement([])}>清除</button>}
+          </div>
+        )}
+
+        {displayOpen && (
+          <div className="display-popover">
+            <header><Contrast size={16} /><strong>显示参数</strong><button onClick={() => setDisplay({ brightness: 100, contrast: 100, saturation: 100 })}>重置</button></header>
+            {([
+              ["亮度", "brightness"],
+              ["对比度", "contrast"],
+              ["饱和度", "saturation"]
+            ] as const).map(([label, key]) => (
+              <label key={key}><span>{label}</span><input type="range" min="40" max="180" value={display[key]} onChange={(event) => setDisplay({ ...display, [key]: Number(event.target.value) })} /><b>{display[key]}%</b></label>
+            ))}
           </div>
         )}
 
@@ -542,7 +659,7 @@ export function SlideViewer({
         </div>
       </section>
 
-      <aside className="annotation-panel">
+      {!panelCollapsed && <aside className="annotation-panel">
         <div className="annotation-tabs">
           <button
             className={rightTab === "objects" ? "active" : ""}
@@ -563,12 +680,12 @@ export function SlideViewer({
             <div className="panel-section layer-section">
               <div className="section-title">
                 <span><Layers3 size={16} />图层</span>
-                <button><Plus size={15} /></button>
+                <button title="显示全部图层" onClick={() => { setShowManual(true); setShowAi(true); setAnnotations((items) => items.map((item) => ({ ...item, visible: true }))); }}><Plus size={15} /></button>
               </div>
-              <button className="layer-row active">
+              <button className={`layer-row ${showManual ? "active" : ""}`} onClick={() => setShowManual(!showManual)}>
                 <i className="layer-thumb"><Pencil size={14} /></i>
                 <span><strong>人工标注</strong><small>{annotations.filter((a) => a.source !== "ai").length} 个对象</small></span>
-                <Eye size={16} />
+                {showManual ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
               <button className="layer-row" onClick={() => setShowAi(!showAi)}>
                 <i className="layer-thumb ai"><Bot size={14} /></i>
@@ -665,8 +782,7 @@ export function SlideViewer({
           </div>
           <button onClick={save} disabled={saving}><Save size={16} />保存</button>
         </div>
-      </aside>
+      </aside>}
     </div>
   );
 }
-

@@ -1,4 +1,13 @@
-import type { Annotation, SlideImage } from "./types";
+import type {
+  AnalyticsData,
+  Annotation,
+  AnnotationTask,
+  AnnotationTaskInput,
+  ModelRun,
+  ModelRunKind,
+  ProjectSettings,
+  SlideImage
+} from "./types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -56,4 +65,86 @@ export async function uploadSlide(file: File): Promise<SlideImage> {
     throw new Error(detail?.detail ?? "切片导入失败");
   }
   return response.json();
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? `请求失败：${response.status}`);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+
+export function getTasks(): Promise<AnnotationTask[]> {
+  return requestJson("/api/v1/tasks");
+}
+
+export function createTask(
+  task: AnnotationTaskInput
+): Promise<AnnotationTask> {
+  return requestJson("/api/v1/tasks", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify(task)
+  });
+}
+
+export function updateTask(
+  id: string,
+  task: Partial<AnnotationTaskInput>
+): Promise<AnnotationTask> {
+  return requestJson(`/api/v1/tasks/${id}`, {
+    method: "PATCH",
+    headers: jsonHeaders,
+    body: JSON.stringify(task)
+  });
+}
+
+export function deleteTask(id: string): Promise<void> {
+  return requestJson(`/api/v1/tasks/${id}`, { method: "DELETE" });
+}
+
+export function getModelRuns(): Promise<ModelRun[]> {
+  return requestJson("/api/v1/model-runs");
+}
+
+export function createModelRun(payload: {
+  kind: ModelRunKind;
+  name: string;
+  algorithm: string;
+  architecture: string;
+  dataset: string;
+  config: Record<string, string | number | boolean>;
+}): Promise<ModelRun> {
+  return requestJson("/api/v1/model-runs", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function simulateModelRun(id: string): Promise<ModelRun> {
+  return requestJson(`/api/v1/model-runs/${id}/simulate`, {
+    method: "POST"
+  });
+}
+
+export function getProjectSettings(): Promise<ProjectSettings> {
+  return requestJson("/api/v1/project-settings");
+}
+
+export function saveProjectSettings(
+  settings: ProjectSettings
+): Promise<ProjectSettings> {
+  return requestJson("/api/v1/project-settings", {
+    method: "PUT",
+    headers: jsonHeaders,
+    body: JSON.stringify(settings)
+  });
+}
+
+export function getAnalytics(): Promise<AnalyticsData> {
+  return requestJson("/api/v1/analytics");
 }

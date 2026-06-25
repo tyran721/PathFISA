@@ -106,20 +106,18 @@ export function SlidesPage() {
 
       <div className="library-summary">
         <span>全部切片 <strong>{filtered.length}</strong></span>
-        <span>已标注 <strong>{Math.max(0, filtered.length - 1)}</strong></span>
-        <span>待处理 <strong>{filtered.length ? 1 : 0}</strong></span>
+        <span>已标注 <strong>0</strong></span>
+        <span>待处理 <strong>{filtered.length}</strong></span>
       </div>
 
       {view === "grid" ? (
         <div className="slide-grid">
-          {filtered.map((slide, index) => (
+          {filtered.map((slide) => (
             <Link to={`/annotate/${slide.id}`} className="slide-card" key={slide.id}>
               <div className="slide-preview">
                 <img src={slide.thumbnailUrl} alt={slide.name} />
                 <div className="slide-topline">
-                  <StatusPill tone={index === 0 ? "blue" : "green"}>
-                    {index === 0 ? "标注中" : "已复核"}
-                  </StatusPill>
+                  <StatusPill tone="gray">待标注</StatusPill>
                   <span>{slide.objectivePower}×</span>
                 </div>
                 <div className="open-hint">打开标注工作台 <ChevronRight size={16} /></div>

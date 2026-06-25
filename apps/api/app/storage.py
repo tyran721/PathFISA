@@ -10,6 +10,9 @@ DATA_DIR = ROOT / "data"
 SLIDES_DIR = DATA_DIR / "slides"
 ANNOTATIONS_DIR = DATA_DIR / "annotations"
 SLIDE_REGISTRY = SLIDES_DIR / "registry.json"
+TASKS_FILE = DATA_DIR / "tasks.json"
+MODEL_RUNS_FILE = DATA_DIR / "model-runs.json"
+SETTINGS_FILE = DATA_DIR / "project-settings.json"
 LOCK = Lock()
 
 
@@ -62,3 +65,20 @@ def save_slide_registry(records: list[dict]) -> None:
             encoding="utf-8",
         )
         temp_path.replace(SLIDE_REGISTRY)
+
+
+def load_json_records(path: Path, default: list[dict] | dict) -> list[dict] | dict:
+    if not path.exists():
+        return default
+    with LOCK:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_json_records(path: Path, records: list[dict] | dict) -> None:
+    temp_path = path.with_suffix(".tmp")
+    with LOCK:
+        temp_path.write_text(
+            json.dumps(records, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        temp_path.replace(path)

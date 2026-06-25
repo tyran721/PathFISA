@@ -52,7 +52,7 @@ export function DashboardPage() {
       <PageHeader
         eyebrow="2026 年 6 月 23 日 · 星期二"
         title="晚上好，林医生"
-        description="肺腺癌组织分区项目进展顺利，今天有 12 个新任务等待处理。"
+        description="病理小样本增量自学习项目运行正常，真实全切片已接入标注工作流。"
         actions={
           <>
             <button className="soft-button">
@@ -185,10 +185,10 @@ export function DashboardPage() {
             <span />
           </div>
           {[
-            ["LUAD-2026-0184", "HE · A-03", "肿瘤区域分割", "张敏", 82, "标注中", "blue"],
-            ["LUAD-2026-0181", "HE · B-01", "多区域复核", "林医生", 100, "待复核", "amber"],
-            ["LUAD-2026-0179", "IHC · PD-L1", "阳性细胞计数", "王冉", 100, "已完成", "green"],
-            ["LUAD-2026-0176", "HE · A-01", "组织区域分割", "李夏", 46, "标注中", "blue"]
+            ["23766HE", "23766he.svs", "肾脏组织区域标注", "张敏", 12, "标注中", "blue"],
+            ["23871HE", "23871he.svs", "肾脏多区域分割", "林医生", 68, "标注中", "blue"],
+            ["B20028048-1", "B20028048-1.svs", "病理区域复核", "王冉", 100, "待复核", "amber"],
+            ["CMU-1-JP2K-33005", "CMU-1-JP2K-33005.svs", "教学切片组织标注", "李夏", 100, "已完成", "green"]
           ].map(([id, slide, type, owner, progress, status, tone]) => (
             <div className="table-row" key={id as string}>
               <span className="case-cell">
@@ -209,4 +209,3 @@ export function DashboardPage() {
     </div>
   );
 }
-

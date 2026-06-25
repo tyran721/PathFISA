@@ -19,6 +19,11 @@ const navigation = [
   { to: "/models", label: "模型中心", icon: BrainCircuit }
 ];
 
+const systemNavigation = [
+  { to: "/analytics", label: "数据分析", icon: Activity },
+  { to: "/settings", label: "项目设置", icon: Settings2 }
+];
+
 export function AppShell() {
   return (
     <div className="app-shell">
@@ -31,7 +36,7 @@ export function AppShell() {
           </div>
           <div>
             <strong>PathFISA</strong>
-            <small>PATHOLOGY INTELLIGENCE</small>
+            <small>智能病理标注与增量学习</small>
           </div>
         </div>
 
@@ -39,7 +44,7 @@ export function AppShell() {
           <div className="project-icon">LU</div>
           <div>
             <span>当前研究项目</span>
-            <strong>肺腺癌组织分区</strong>
+            <strong>病理小样本增量学习</strong>
           </div>
           <ChevronDown size={16} />
         </div>
@@ -54,14 +59,12 @@ export function AppShell() {
             </NavLink>
           ))}
           <p>系统</p>
-          <a href="#analytics">
-            <Activity size={19} strokeWidth={1.8} />
-            <span>数据分析</span>
-          </a>
-          <a href="#settings">
-            <Settings2 size={19} strokeWidth={1.8} />
-            <span>项目设置</span>
-          </a>
+          {systemNavigation.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to}>
+              <Icon size={19} strokeWidth={1.8} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
         </nav>
 
         <div className="sidebar-insight">
@@ -88,6 +91,10 @@ export function AppShell() {
             <input placeholder="搜索病例、切片或任务..." />
             <kbd>⌘ K</kbd>
           </div>
+          <div className="software-title">
+            <strong>病理小样本增量自学习智能标注软件</strong>
+            <span>PATHOLOGY FEW-SHOT INCREMENTAL SELF-LEARNING ANNOTATION</span>
+          </div>
           <div className="topbar-actions">
             <button className="icon-button" aria-label="通知">
               <Bell size={19} />
@@ -104,4 +111,3 @@ export function AppShell() {
     </div>
   );
 }
-
