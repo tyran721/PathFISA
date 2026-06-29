@@ -227,9 +227,6 @@ def add_manual_header_footer(doc: Document) -> None:
     r = fp.add_run("第 ")
     set_run_font(r, size=8.5, color=GRAY)
     add_field(fp, "PAGE")
-    r = fp.add_run(" 页 / 共 ")
-    set_run_font(r, size=8.5, color=GRAY)
-    add_field(fp, "NUMPAGES")
     r = fp.add_run(" 页")
     set_run_font(r, size=8.5, color=GRAY)
 
@@ -258,8 +255,100 @@ def add_bullet(doc: Document, text: str) -> None:
     doc.add_paragraph(text, style="List Bullet")
 
 
-def add_numbered(doc: Document, text: str) -> None:
-    doc.add_paragraph(text, style="List Number")
+def create_numbering_instance(doc: Document) -> int:
+    numbering = doc.part.numbering_part.element
+    abstract_ids = [
+        int(node.get(qn("w:abstractNumId")))
+        for node in numbering.findall(qn("w:abstractNum"))
+    ]
+    num_ids = [
+        int(node.get(qn("w:numId")))
+        for node in numbering.findall(qn("w:num"))
+    ]
+    abstract_id = max(abstract_ids, default=0) + 1
+    num_id = max(num_ids, default=0) + 1
+
+    abstract = OxmlElement("w:abstractNum")
+    abstract.set(qn("w:abstractNumId"), str(abstract_id))
+    nsid = OxmlElement("w:nsid")
+    nsid.set(qn("w:val"), f"{(0xA1000000 + abstract_id):08X}")
+    abstract.append(nsid)
+    multi = OxmlElement("w:multiLevelType")
+    multi.set(qn("w:val"), "singleLevel")
+    abstract.append(multi)
+
+    level = OxmlElement("w:lvl")
+    level.set(qn("w:ilvl"), "0")
+    start = OxmlElement("w:start")
+    start.set(qn("w:val"), "1")
+    level.append(start)
+    num_fmt = OxmlElement("w:numFmt")
+    num_fmt.set(qn("w:val"), "decimal")
+    level.append(num_fmt)
+    level_text = OxmlElement("w:lvlText")
+    level_text.set(qn("w:val"), "%1.")
+    level.append(level_text)
+    lvl_jc = OxmlElement("w:lvlJc")
+    lvl_jc.set(qn("w:val"), "left")
+    level.append(lvl_jc)
+    p_pr = OxmlElement("w:pPr")
+    tabs = OxmlElement("w:tabs")
+    tab = OxmlElement("w:tab")
+    tab.set(qn("w:val"), "num")
+    tab.set(qn("w:pos"), "540")
+    tabs.append(tab)
+    p_pr.append(tabs)
+    ind = OxmlElement("w:ind")
+    ind.set(qn("w:left"), "540")
+    ind.set(qn("w:hanging"), "270")
+    p_pr.append(ind)
+    spacing = OxmlElement("w:spacing")
+    spacing.set(qn("w:after"), "80")
+    spacing.set(qn("w:line"), "288")
+    spacing.set(qn("w:lineRule"), "auto")
+    p_pr.append(spacing)
+    level.append(p_pr)
+    abstract.append(level)
+    first_num_index = next(
+        (
+            index
+            for index, child in enumerate(list(numbering))
+            if child.tag == qn("w:num")
+        ),
+        len(numbering),
+    )
+    numbering.insert(first_num_index, abstract)
+
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), str(num_id))
+    abstract_ref = OxmlElement("w:abstractNumId")
+    abstract_ref.set(qn("w:val"), str(abstract_id))
+    num.append(abstract_ref)
+    level_override = OxmlElement("w:lvlOverride")
+    level_override.set(qn("w:ilvl"), "0")
+    start_override = OxmlElement("w:startOverride")
+    start_override.set(qn("w:val"), "1")
+    level_override.append(start_override)
+    num.append(level_override)
+    numbering.append(num)
+    return num_id
+
+
+def add_numbered_group(doc: Document, items: list[str]) -> None:
+    num_id = create_numbering_instance(doc)
+    for text in items:
+        p = doc.add_paragraph(text)
+        p.paragraph_format.space_after = Pt(4)
+        p.paragraph_format.line_spacing = 1.2
+        p_pr = p._p.get_or_add_pPr()
+        num_pr = OxmlElement("w:numPr")
+        ilvl = OxmlElement("w:ilvl")
+        ilvl.set(qn("w:val"), "0")
+        num_id_node = OxmlElement("w:numId")
+        num_id_node.set(qn("w:val"), str(num_id))
+        num_pr.append(ilvl)
+        num_pr.append(num_id_node)
+        p_pr.append(num_pr)
 
 
 def add_callout(doc: Document, label: str, text: str, fill=MINT) -> None:
@@ -503,9 +592,14 @@ def build_manual() -> None:
         ],
     )
     doc.add_heading("2.2 安装步骤", level=2)
-    add_numbered(doc, "打开 PowerShell，进入 PathFISA 项目根目录。")
-    add_numbered(doc, "执行 .\\scripts\\setup.ps1，创建 Python 虚拟环境并安装前后端依赖。")
-    add_numbered(doc, "安装完成后执行 npm run dev 启动 Web 与 API 服务。")
+    add_numbered_group(
+        doc,
+        [
+            "打开 PowerShell，进入 PathFISA 项目根目录。",
+            "执行 .\\scripts\\setup.ps1，创建 Python 虚拟环境并安装前后端依赖。",
+            "安装完成后执行 npm run dev 启动 Web 与 API 服务。",
+        ],
+    )
     add_callout(doc, "依赖说明", "后端使用 FastAPI、Pillow、OpenSlide；前端使用 React、TypeScript、Vite 和 OpenSeadragon。")
     page_break(doc)
 
@@ -572,9 +666,14 @@ def build_manual() -> None:
     # Page 10
     add_page_title(doc, "第7章", "切片导入", "系统支持常见图像及病理全切片格式；大文件上传时间取决于磁盘和网络。")
     add_picture(doc, "slides.png", width_cm=16.3, caption="图7-1 切片库与添加入口")
-    add_numbered(doc, "在“病例与切片”页面点击“添加切片”或“批量导入”。")
-    add_numbered(doc, "选择本地文件，并填写病例编号、染色类型、组织类型、MPP 和物镜倍率。")
-    add_numbered(doc, "提交后等待后端校验图像格式和尺寸；成功后切片出现在列表中。")
+    add_numbered_group(
+        doc,
+        [
+            "在“病例与切片”页面点击“添加切片”或“批量导入”。",
+            "选择本地文件，并填写病例编号、染色类型、组织类型、MPP 和物镜倍率。",
+            "提交后等待后端校验图像格式和尺寸；成功后切片出现在列表中。",
+        ],
+    )
     add_callout(doc, "支持格式", "JPEG、PNG、TIFF、SVS、NDPI、MRXS、SCN、VMS、VMU、BIF 等；实际可读性受本机 OpenSlide 支持范围影响。")
     page_break(doc)
 
@@ -598,10 +697,15 @@ def build_manual() -> None:
     # Page 13
     add_page_title(doc, "第10章", "创建标注与快捷键")
     doc.add_heading("10.1 绘制标注", level=2)
-    add_numbered(doc, "在左上方选择当前标签，确认颜色和类别。")
-    add_numbered(doc, "选择点、矩形或多边形工具，在切片视图中绘制。")
-    add_numbered(doc, "多边形可通过双击或执行完成动作闭合；新对象自动进入人工标注图层。")
-    add_numbered(doc, "选中对象后可移动、查看属性或删除；使用撤销/重做恢复操作。")
+    add_numbered_group(
+        doc,
+        [
+            "在左上方选择当前标签，确认颜色和类别。",
+            "选择点、矩形或多边形工具，在切片视图中绘制。",
+            "多边形可通过双击或执行完成动作闭合；新对象自动进入人工标注图层。",
+            "选中对象后可移动、查看属性或删除；使用撤销/重做恢复操作。",
+        ],
+    )
     doc.add_heading("10.2 常用快捷键", level=2)
     table = doc.add_table(rows=1, cols=4)
     set_table_widths(table, [1200, 3480, 1200, 3480], indent_dxa=120)
@@ -640,9 +744,14 @@ def build_manual() -> None:
     add_bullet(doc, "点击右下角“保存”或使用 Ctrl+S，将当前对象保存为切片标注 JSON。")
     add_bullet(doc, "保存成功后页面显示已保存状态；重新打开切片时自动加载已保存标注。")
     doc.add_heading("12.2 提交复核", level=2)
-    add_numbered(doc, "检查标注对象数量、标签、边界和 AI 来源。")
-    add_numbered(doc, "点击顶部“提交复核”，任务进入待复核状态。")
-    add_numbered(doc, "复核人员通过任务看板打开切片，查看人工与 AI 结果，决定通过或返修。")
+    add_numbered_group(
+        doc,
+        [
+            "检查标注对象数量、标签、边界和 AI 来源。",
+            "点击顶部“提交复核”，任务进入待复核状态。",
+            "复核人员通过任务看板打开切片，查看人工与 AI 结果，决定通过或返修。",
+        ],
+    )
     doc.add_heading("12.3 协作与分享", level=2)
     add_bullet(doc, "评论入口用于记录切片级复核意见；分享按钮复制当前页面地址。")
     add_bullet(doc, "可切换全屏或收起右侧面板，扩大 WSI 浏览区域。")
@@ -669,9 +778,14 @@ def build_manual() -> None:
         ],
     )
     doc.add_heading("14.2 基本操作", level=2)
-    add_numbered(doc, "进入“模型中心”，选择新建评估、小样本训练或增量训练。")
-    add_numbered(doc, "按向导填写基础配置、算法架构、运行参数和质量门禁。")
-    add_numbered(doc, "保存草稿或提交作业；系统记录配置、状态、进度和指标结果。")
+    add_numbered_group(
+        doc,
+        [
+            "进入“模型中心”，选择新建评估、小样本训练或增量训练。",
+            "按向导填写基础配置、算法架构、运行参数和质量门禁。",
+            "保存草稿或提交作业；系统记录配置、状态、进度和指标结果。",
+        ],
+    )
     add_callout(doc, "受控发布", "当前版本的模型作业以流程配置和模拟运行接口为主；模型发布必须保留人工审批环节。")
     page_break(doc)
 
@@ -931,9 +1045,6 @@ def add_source_header_footer(doc: Document) -> None:
     r = p.add_run("第 ")
     set_run_font(r, size=7.2, color=GRAY)
     add_field(p, "PAGE")
-    r = p.add_run(" 页 / 共 ")
-    set_run_font(r, size=7.2, color=GRAY)
-    add_field(p, "NUMPAGES")
     r = p.add_run(" 页")
     set_run_font(r, size=7.2, color=GRAY)
 

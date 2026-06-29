@@ -104,7 +104,7 @@ export function AppShell() {
           </div>
           <div>
             <strong>PathFISA</strong>
-            <small>智能病理标注与增量学习</small>
+            <small>病理小样本增量自学习智能标注软件</small>
           </div>
         </div>
 
@@ -160,7 +160,7 @@ export function AppShell() {
             <kbd>⌘ K</kbd>
           </div>
           <div className="software-title">
-            <strong>病理小样本增量自学习智能标注软件</strong>
+            <strong>PathFISA病理小样本增量自学习智能标注软件</strong>
             <span>PATHOLOGY FEW-SHOT INCREMENTAL SELF-LEARNING ANNOTATION</span>
           </div>
           <div className="topbar-actions">
